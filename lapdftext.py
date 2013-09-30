@@ -2,6 +2,7 @@
 
 from __future__ import division
 from collections import Counter
+from sets import Set
 
 import os
 import sys
@@ -49,11 +50,11 @@ class Word:
             return None
     
 class Chunk:
-    def __init__(self, pageNum, w, h, pageLoc):
+    def __init__(self, pageNum, w, h, pageBlocks):
         self.pageNum = pageNum
         self.width = w
         self.height = h
-        self.pageLoc = pageLoc
+        self.pageBlocks = pageBlocks
         self.words = []
         self.mfAttrs = {}
         
@@ -75,7 +76,7 @@ class Chunk:
         size = self.get_mf_attr("font-size")
         style = self.get_mf_attr("font-style")
         
-        return " ".join([i.text for i in self.words]) + " ("+str(size)+","+str(style)+")"
+        return " ".join([i.text for i in self.words]) + " ("+str(size)+","+str(style)+",blocks: "+";".join([str(i) for i in self.pageBlocks])+")"
             
 
 class LapdfText:
@@ -95,21 +96,24 @@ class LapdfText:
         root = tree.getroot()
 
         curPage = 0
-        curPageWidth = 0
-        curPageHeight = 0
+        curPageOrigin = ()
+        curPageTop = ()
         curChunk = None
         for element in root.iter("Page", "Chunk", "Word"):
             if element.tag == "Page":
                 self.numPages += 1
                 curPage = element.get("pageNumber")
-                curPageWidth = int(element.get("x2")) - int(element.get("x1"))
-                curPageHeight = int(element.get("y2")) - int(element.get("y1"))
+                curPageOrigin = (int(element.get("x1")), int(element.get("y1")))
+                curPageTop = (int(element.get("x2")), int(element.get("y2")))
 
             elif element.tag == "Chunk":
-                width = int(element.get("x2")) - int(element.get("x1"))
-                height = int(element.get("y2")) - int(element.get("y1"))
+                blockOrigin = (int(element.get("x1")), int(element.get("y1")))
+                blockTop = (int(element.get("x2")), int(element.get("y2")))
                 self.chunks.append(curChunk)
-                curChunk = Chunk(curPage, width, height, self.get_block(width, height, curPageWidth, curPageHeight))
+                curChunk = Chunk(curPage, 
+                                 int(element.get("x2"))-int(element.get("x1")), # width
+                                 int(element.get("y2"))-int(element.get("y1")), # height
+                                 self.get_blocks(blockOrigin, blockTop, curPageOrigin, curPageTop))
 
             elif element.tag == "Word":
                 styleStr = element.get("style")
@@ -150,8 +154,43 @@ class LapdfText:
 
         return cls(outfilepath)
         
-    def get_block(self, w, h, w2, h2):
-        return 1
+    def get_blocks(self, blockOrigin, blockTop, pageOrigin, pageTop):
+
+        blocks = Set([])
+
+        pageHeight = pageTop[1] - pageOrigin[1]
+        pageWidth = pageTop[0] - pageOrigin[0]
+
+        # these are the points to be checked
+        points = (blockOrigin, (blockOrigin[0], blockTop[1]), blockTop, (blockTop[0], blockOrigin[1]))
+        
+        # these are the ranges they can be in
+        yranges = {0: (pageOrigin[1], pageOrigin[1]+pageHeight/3), 
+                   1: (pageOrigin[1]+pageHeight/3, pageOrigin[1]+pageHeight*2/3),
+                   2: (pageOrigin[1]+pageHeight*2/3, pageOrigin[1]+pageHeight)};
+        xranges = {0: (pageOrigin[0], pageOrigin[0]+pageWidth/2),
+                   1: (pageOrigin[0]+pageWidth/2, pageTop[0])}
+
+        # simple hash to quicken the mapping
+
+        blockHash = {"00": PageLoc.TopLeft, "01": PageLoc.MiddleLeft, "02": PageLoc.BottomLeft,
+                     "10": PageLoc.TopRight, "11": PageLoc.MiddleRight, "12": PageLoc.BottomRight}
+
+        for p in points:
+            blockx = blocky = 0 # the valid values are (0,0), (0,1), (0,2), (1,0), (1,1), (1,2)
+            for bx, xr in xranges.iteritems():
+                if p[0] >= xr[0] and p[0] < xr[1]:
+                    blockx = bx
+                    break
+
+            for by, yr in yranges.iteritems():
+                if p[1] >= yr[0] and p[1] < yr[1]:
+                    blocky = by
+                    break
+
+            blocks.add(blockHash[str(bx)+str(by)])
+
+        return blocks
 
 if(__name__ == "__main__"):
     if(len(sys.argv) < 2):
