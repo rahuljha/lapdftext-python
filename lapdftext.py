@@ -76,7 +76,7 @@ class Chunk:
         size = self.get_mf_attr("font-size")
         style = self.get_mf_attr("font-style")
         
-        return " ".join([i.text for i in self.words]) + " ("+str(size)+","+str(style)+",blocks: "+";".join([str(i) for i in self.pageBlocks])+")"
+        return " ".join([i.text for i in self.words]) + " (size:"+str(size)+",style:"+str(style)+",blocks: "+";".join([str(i) for i in self.pageBlocks])+")"
             
 
 class LapdfText:
@@ -86,7 +86,8 @@ class LapdfText:
         utility of lapdftext"""
 
         self.numPages = 0
-        self.mostFreqFontSize = 0
+        self.mostFreqFontSize = None
+        self.allFontSizes = None
         self.chunks = []
 
         if not os.path.exists(blockfilepath):
@@ -107,36 +108,71 @@ class LapdfText:
                 curPageTop = (int(element.get("x2")), int(element.get("y2")))
 
             elif element.tag == "Chunk":
-                blockOrigin = (int(element.get("x1")), int(element.get("y1")))
-                blockTop = (int(element.get("x2")), int(element.get("y2")))
+                curChunk = self.create_chunk(element, curPage, curPageOrigin, curPageTop)
                 self.chunks.append(curChunk)
-                curChunk = Chunk(curPage, 
-                                 int(element.get("x2"))-int(element.get("x1")), # width
-                                 int(element.get("y2"))-int(element.get("y1")), # height
-                                 self.get_blocks(blockOrigin, blockTop, curPageOrigin, curPageTop))
 
-            elif element.tag == "Word":
-                styleStr = element.get("style")
-                styleMap = {}
+            elif element.tag == "Word":                                       
+                curChunk.add_word(self.create_word(element))
 
-                try:
-                    for pair in styleStr.split(";"):
-                        (name, val) = pair.split(":")
-                        if name == "font-size":
-                            val = val.replace("pt", "")
-                        styleMap[name] = val
-                    # if font-style is not explicity present, it is sometimes implicit in the font name
-                    if("font-style" not in styleMap):
-                        fontName = element.get("font")
-                        if(re.search("bold", fontName, re.IGNORECASE) or re.search("medi", fontName, re.IGNORECASE)):
-                            styleMap["font-style"] = "Bold"
-                        elif(re.search("ital", fontName, re.IGNORECASE)):
-                            styleMap["font-style"] = "Bold"
-                except:
-                    styleMap = {}
-                        
-                curChunk.add_word(Word(element.text.encode('ascii', 'ignore'), styleMap))
+    def get_mfs(self):
+        """Returns the most frequent font size in this article"""
 
+        if not self.mostFreqFontSize:
+            font_sizes = []
+            for c in self.chunks:
+                for w in c.words:
+                    font_sizes.extend([w.get_attr("font-size")])
+
+            counts = Counter(font_sizes)
+            self.mostFreqFontSize = max(counts.iteritems(), key=(lambda w: counts[w]))[0]
+            self.allFontSizes = sorted([int(i) for i in counts.keys() if i])
+        return self.mostFreqFontSize
+
+    def get_font_sizes(self):
+        if not self.allFontSizes:
+            self.get_mfs()
+
+        return self.allFontSizes
+                
+
+    def create_chunk(self, element, curPage, curPageOrigin, curPageTop):
+        blockOrigin = (int(element.get("x1")), int(element.get("y1")))
+        blockTop = (int(element.get("x2")), int(element.get("y2")))
+        return Chunk(curPage, 
+                     int(element.get("x2"))-int(element.get("x1")), # width
+                     int(element.get("y2"))-int(element.get("y1")), # height
+                     self.get_blocks(blockOrigin, blockTop, curPageOrigin, curPageTop))
+
+    def create_word(self, element):
+        styleStr = element.get("style")
+        styleMap = {}
+
+        try:
+            for pair in styleStr.split(";"):
+                (name, val) = pair.split(":")
+                if name == "font-size":
+                    val = val.replace("pt", "")
+                    styleMap[name] = val
+                if name == "font-style":
+                    if(re.search("italic", val, re.IGNORECASE)):
+                        styleMap[name] = FontStyle.Italics
+                    elif(re.search("bold", val, re.IGNORECASE)):
+                        styleMap[name] = FontStyle.Bold
+                    else:
+                        styleMap[name] = FontStyle.Regular
+
+            # if font-style is not explicity present, it is sometimes implicit in the font name
+            if("font-style" not in styleMap):
+                fontName = element.get("font")
+                if(re.search("bold", fontName, re.IGNORECASE) or re.search("medi", fontName, re.IGNORECASE)):
+                    styleMap["font-style"] = FontStyle.Bold
+                elif(re.search("ital", fontName, re.IGNORECASE)):
+                    styleMap["font-style"] = FontStyle.Bold
+        except:
+            styleMap = {}
+
+        return Word(element.text.encode('ascii', 'ignore'), styleMap)
+        
     @classmethod
     def from_pdffile(cls, pdffilepath):
         """constructor to initialize an instance from a PDF file"""
@@ -207,5 +243,8 @@ if(__name__ == "__main__"):
     else:
         print "Unknown file type: "+f_type
         sys.exit(1)
+
+    print "MF font size: "+lpt.get_mfs()
+    print "All sizes: "+";".join([str(s) for s in lpt.get_font_sizes()])
     for c in lpt.chunks:
         print c
