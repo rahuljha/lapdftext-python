@@ -31,13 +31,11 @@ paper = etree.Element("paper")
 curSection = None
 mainBodyStarted = False
 
-tutils = TextUtils()
-
 for c in lpt.chunks:
     chunk_font_size = c.get_mf_attr("font-size")
     chunk_font_style = c.get_mf_attr("font-style")
     chunkText = " ".join([i.text for i in c.words])
-    chunkText = tutils.remove_hyphens(chunkText)
+    chunkText = TextUtils.fix_wide_letters(TextUtils.remove_hyphens(chunkText))
     
 #        print " ".join([i.text for i in c.words])
     if chunk_font_size >= text_font_size and chunk_font_size <= heading_size and chunk_font_style == FontStyle.Bold:

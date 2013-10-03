@@ -11,6 +11,7 @@ from subprocess import call
 from lxml import etree
 
 from lapdfExceptions import *
+from text_utils import TextUtils
 
 ## Defining Enums ##
 
@@ -108,10 +109,11 @@ class LapdfText:
                 curPageTop = (int(element.get("x2")), int(element.get("y2")))
 
             elif element.tag == "Chunk":
+                # a new chunk element has started, create a new chunk
                 curChunk = self.create_chunk(element, curPage, curPageOrigin, curPageTop)
                 self.chunks.append(curChunk)
 
-            elif element.tag == "Word":                                       
+            elif element.tag == "Word":         
                 curChunk.add_word(self.create_word(element))
 
     def get_mfs(self):
@@ -248,4 +250,4 @@ if(__name__ == "__main__"):
     print "All sizes: "+";".join([str(s) for s in lpt.get_font_sizes()])
     for c in lpt.chunks:
         print c
-        print c.get_mf_attr("font-style")
+
