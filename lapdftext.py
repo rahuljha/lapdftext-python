@@ -31,7 +31,7 @@ def enum(**enums):
 PageLoc = enum(TopLeft = 1, TopRight = 2, MiddleLeft = 3, MiddleRight = 4, BottomLeft = 5, BottomRight = 6)
 
 #Enum to specifiy font styles
-FontStyle = enum(Regular = 1, Italics = 1, Bold = 1)
+FontStyle = enum(Regular = 1, Italics = 2, Bold = 3)
 
 ## Done Defining Enums ##
 
@@ -68,7 +68,7 @@ class Chunk:
         else:
             # compute
             counts = Counter([w.get_attr(attr) for w in self.words])
-            mfAttr = max(counts.iteritems(), key=(lambda w: counts[w]))[0]
+            mfAttr = max(counts.iterkeys(), key=(lambda w: counts[w]))
             self.mfAttrs[attr] = mfAttr
             return mfAttr
 
@@ -124,7 +124,7 @@ class LapdfText:
                     font_sizes.extend([w.get_attr("font-size")])
 
             counts = Counter(font_sizes)
-            self.mostFreqFontSize = max(counts.iteritems(), key=(lambda w: counts[w]))[0]
+            self.mostFreqFontSize = int(max(counts.iterkeys(), key=(lambda w: counts[w])))
             self.allFontSizes = sorted([int(i) for i in counts.keys() if i])
         return self.mostFreqFontSize
 
@@ -152,7 +152,7 @@ class LapdfText:
                 (name, val) = pair.split(":")
                 if name == "font-size":
                     val = val.replace("pt", "")
-                    styleMap[name] = val
+                    styleMap[name] = int(val)
                 if name == "font-style":
                     if(re.search("italic", val, re.IGNORECASE)):
                         styleMap[name] = FontStyle.Italics
@@ -167,7 +167,7 @@ class LapdfText:
                 if(re.search("bold", fontName, re.IGNORECASE) or re.search("medi", fontName, re.IGNORECASE)):
                     styleMap["font-style"] = FontStyle.Bold
                 elif(re.search("ital", fontName, re.IGNORECASE)):
-                    styleMap["font-style"] = FontStyle.Bold
+                    styleMap["font-style"] = FontStyle.Italics
         except:
             styleMap = {}
 
@@ -244,7 +244,8 @@ if(__name__ == "__main__"):
         print "Unknown file type: "+f_type
         sys.exit(1)
 
-    print "MF font size: "+lpt.get_mfs()
+    print "MF font size: "+str(lpt.get_mfs())
     print "All sizes: "+";".join([str(s) for s in lpt.get_font_sizes()])
     for c in lpt.chunks:
         print c
+        print c.get_mf_attr("font-style")

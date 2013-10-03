@@ -2,7 +2,7 @@
 
 import re
 import sys
-from lapdftext import LapdfText
+from lapdftext import LapdfText, FontStyle
 from lxml import etree
 from text_utils import TextUtils
 
@@ -35,16 +35,12 @@ tutils = TextUtils()
 
 for c in lpt.chunks:
     chunk_font_size = c.get_mf_attr("font-size")
+    chunk_font_style = c.get_mf_attr("font-style")
     chunkText = " ".join([i.text for i in c.words])
     chunkText = tutils.remove_hyphens(chunkText)
     
-    if chunk_font_size == text_font_size:
-        if curSection is not None:
-            curSection.text += chunkText
 #        print " ".join([i.text for i in c.words])
-    elif chunk_font_size < text_font_size and re.match("references", curSection.attrib["name"], flags = re.IGNORECASE):
-        curSection.text += chunkText
-    elif chunk_font_size == heading_size:
+    if chunk_font_size >= text_font_size and chunk_font_size <= heading_size and chunk_font_style == FontStyle.Bold:
         if not mainBodyStarted and re.match("abstract", chunkText, flags = re.IGNORECASE):
             mainBodyStarted = True
         if not mainBodyStarted: continue
@@ -58,6 +54,12 @@ for c in lpt.chunks:
         curSection.attrib["name"] = chunkText
         curSection.text = ""
 #        print "Heading: "+" ".join([i.text for i in c.words])
+    elif chunk_font_size == text_font_size:
+        if curSection is not None:
+            curSection.text += chunkText
+    elif (chunk_font_size < text_font_size and curSection is not None 
+          and re.match("references", curSection.attrib["name"], flags = re.IGNORECASE)):
+        curSection.text += chunkText
     else:
         pass
 
